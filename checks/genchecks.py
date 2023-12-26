@@ -55,9 +55,11 @@ with open(f"{cfgname}.cfg", "r") as f:
     for line in f:
         line = line.strip()
 
+        # remove comments
         if line.startswith("#"):
             continue
 
+        # process section of cfg files
         if line.startswith("[") and line.endswith("]"):
             cfgsection = line.lstrip("[").rstrip("]")
             cfgsubsection = None
@@ -66,6 +68,7 @@ with open(f"{cfgname}.cfg", "r") as f:
                 cfgsection = "assume"
             continue
 
+        # initilize cfg dict based on the sections
         if cfgsection is not None:
             if cfgsubsection is None:
                 if cfgsection not in config:
