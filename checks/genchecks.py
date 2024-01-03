@@ -29,6 +29,7 @@ illegal_csrs = set()
 csr_tests = {}
 csr_spec = None
 compr = False
+timeout = 3600
 
 depths = list()
 groups = [None]
@@ -265,6 +266,7 @@ hargs["buslen"] = buslen
 hargs["nbus"] = nbus
 hargs["append"] = 0
 hargs["mode"] = mode
+hargs["timeout"] = timeout
 
 if "cover" in config:
     hargs["cover"] = config["cover"]
@@ -830,6 +832,7 @@ def checks_key(check):
         return f"9999-{check}"
     return f"9998-{check}"
 
+# write make file
 with open(f"{cfgname}/makefile", "w") as mkfile:
     print("all:", end="", file=mkfile)
 
