@@ -645,6 +645,7 @@ def check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_
                 : append @append@
                 : depth @depth_plus@
                 : skip @skip@
+                : timeout @timeout@
                 :
                 : [engines]
                 : @engine@
