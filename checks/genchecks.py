@@ -56,7 +56,7 @@ with open(f"{cfgname}.cfg", "r") as f:
     for line in f:
         line = line.strip()
 
-        # remove comments
+        # ignore comments
         if line.startswith("#"):
             continue
 
