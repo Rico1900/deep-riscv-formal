@@ -396,7 +396,6 @@ def check_insn(grp, insn, chanidx, engine_cfg=None, csr_mode=False, illegal_csr=
                 : expect pass,fail
                 : append @append@
                 : depth @depth_plus@
-                : skip @skip@
                 : timeout @timeout@
                 :
                 : [engines]
@@ -666,7 +665,6 @@ def check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_
                 : expect pass,fail
                 : append @append@
                 : depth @depth_plus@
-                : skip @skip@
                 : timeout @timeout@
                 :
                 : [engines]
