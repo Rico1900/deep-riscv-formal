@@ -16,6 +16,8 @@
 
 import os, sys, shutil, re
 from functools import reduce
+from util import none_str
+from engines import generate_engines
 
 nret = 1
 isa = "rv32i"
@@ -30,6 +32,13 @@ csr_tests = {}
 csr_spec = None
 compr = False
 timeout = 3600
+engines = [
+    "abc bmc3",
+    "abc sim3"
+    "btor btormc",
+    "btor pono",
+    ""
+]
 
 depths = list()
 groups = [None]
@@ -44,6 +53,7 @@ abspath = False
 sbycmd = "sby"
 config = dict()
 mode = "bmc"
+hypermode = "manual"
 
 if len(sys.argv) > 1:
     assert len(sys.argv) == 2
@@ -79,6 +89,11 @@ with open(f"{cfgname}.cfg", "r") as f:
                 if cfgsection not in config:
                     config[cfgsection] = []
                 config[cfgsection].append((cfgsubsection, line))
+
+if "hypermode" in config:
+    input = config["hypermode"].strip()
+    assert input in ["manual", "auto", "all"]
+    hypermode = input
 
 if "options" in config:
     for line in config["options"].split("\n"):
@@ -274,15 +289,21 @@ if "cover" in config:
 instruction_checks = set()
 consistency_checks = set()
 
-if solver == "bmc3":
-    hargs["engine"] = "abc bmc3"
-    hargs["ilang_file"] = f"{corename}-gates.il"
-elif solver == "btormc":
-    hargs["engine"] = "btor btormc"
-    hargs["ilang_file"] = f"{corename}-hier.il"
-else:
-    hargs["engine"] = f"smtbmc {'--dumpsmt2 ' if dumpsmt2 else ''}{solver}"
-    hargs["ilang_file"] = f"{corename}-hier.il"
+if hypermode == "auto":
+    pass
+elif hypermode == "all":
+    engine_cfgs = generate_engines()
+    hargs["engine"] = "\n".join(list(engine_cfgs))
+else: # manual hyper mode
+    if solver == "bmc3":
+        hargs["engine"] = "abc bmc3"
+        hargs["ilang_file"] = f"{corename}-gates.il"
+    elif solver == "btormc":
+        hargs["engine"] = "btor btormc"
+        hargs["ilang_file"] = f"{corename}-hier.il"
+    else:
+        hargs["engine"] = f"smtbmc {'--dumpsmt2 ' if dumpsmt2 else ''}{solver}"
+        hargs["ilang_file"] = f"{corename}-hier.il"
 
 def test_disabled(check):
     if "filter-checks" in config:
@@ -340,7 +361,7 @@ def print_custom_csrs(sby_file):
 
 # ------------------------------ Instruction Checkers ------------------------------
 
-def check_insn(grp, insn, chanidx, csr_mode=False, illegal_csr=False):
+def check_insn(grp, insn, chanidx, engine_cfg=None, csr_mode=False, illegal_csr=False):
     pf = "" if grp is None else grp+"_"
     if illegal_csr:
         (ill_addr, ill_modes, ill_rw) = insn
@@ -353,7 +374,7 @@ def check_insn(grp, insn, chanidx, csr_mode=False, illegal_csr=False):
         else:
             check = "insn"
         depth_cfg = get_depth_cfg([f"{pf}{check}", f"{pf}{check}_ch{chanidx:d}", f"{pf}{check}_{insn}", f"{pf}{check}_{insn}_ch{chanidx:d}"])
-        check = f"{pf}{check}_{insn}_ch{chanidx:d}"
+        check = f"{pf}{check}_{insn}_ch{chanidx:d}_{none_str(engine_cfg)}"
 
     if depth_cfg is None: return
     assert len(depth_cfg) == 1
@@ -376,6 +397,7 @@ def check_insn(grp, insn, chanidx, csr_mode=False, illegal_csr=False):
                 : append @append@
                 : depth @depth_plus@
                 : skip @skip@
+                : timeout @timeout@
                 :
                 : [engines]
                 : @engine@

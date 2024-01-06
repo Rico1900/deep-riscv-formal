@@ -1,1 +1,4 @@
 /cores/.gitignore
+
+# VS Code
+.idea
