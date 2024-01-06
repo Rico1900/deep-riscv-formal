@@ -289,11 +289,11 @@ if "cover" in config:
 instruction_checks = set()
 consistency_checks = set()
 
+all_engine_cfgs = []
 if hypermode == "auto":
     pass
 elif hypermode == "all":
-    engine_cfgs = generate_engines()
-    hargs["engine"] = list(engine_cfgs)
+    all_engine_cfgs = list(generate_engines())
 else: # manual hyper mode
     if solver == "bmc3":
         hargs["engine"] = "abc bmc3"
@@ -556,10 +556,10 @@ def check_insn(grp, insn, chanidx, engine_cfg=None, csr_mode=False, illegal_csr=
                     if enabled:
                         print(line, file=sby_file)
 
-    engine_cfgs = hargs["engine"]
-    cfgs_number = len(engine_cfgs)
+    cfgs_number = len(all_engine_cfgs)
     if cfgs_number <= 100:
         instruction_checks.add(check)
+        hargs["engine"] = "\n".join(all_engine_cfgs)
         write_sby_file(check)
     else:
         start_index = 0
@@ -567,10 +567,10 @@ def check_insn(grp, insn, chanidx, engine_cfg=None, csr_mode=False, illegal_csr=
         while end_index < cfgs_number:
             partition_fname = f"{check}_{start_index}_{end_index}"
             instruction_checks.add(partition_fname)
-            hargs["engine"] = "\n".join(engine_cfgs[start_index:end_index])
+            hargs["engine"] = "\n".join(all_engine_cfgs[start_index:end_index])
+            write_sby_file(partition_fname)
             start_index = start_index + 100
             end_index = end_index + 100
-            write_sby_file(partition_fname)
 
 for grp in groups:
     with open(f"../../insns/isa_{isa}.txt") as isa_file:
@@ -827,10 +827,10 @@ def check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_
                     if enabled:
                         print(line, file=sby_file)
 
-    engine_cfgs = hargs["engine"]
-    cfgs_number = len(engine_cfgs)
+    cfgs_number = len(all_engine_cfgs)
     if cfgs_number <= 100:
         consistency_checks.add(check)
+        hargs["engine"] = "\n".join(all_engine_cfgs)
         write_sby_file(check)
     else:
         start_index = 0
@@ -838,10 +838,10 @@ def check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_
         while end_index < cfgs_number:
             partition_fname = f"{check}_{start_index}_{end_index}"
             consistency_checks.add(partition_fname)
-            hargs["engine"] = "\n".join(engine_cfgs[start_index:end_index])
+            hargs["engine"] = "\n".join(all_engine_cfgs[start_index:end_index])
+            write_sby_file(partition_fname)
             start_index = start_index + 100
             end_index = end_index + 100
-            write_sby_file(partition_fname)
 
 for grp in groups:
     for i in range(nret):
