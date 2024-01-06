@@ -556,12 +556,12 @@ def check_insn(grp, insn, chanidx, engine_cfg=None, csr_mode=False, illegal_csr=
                     if enabled:
                         print(line, file=sby_file)
 
+    engine_cfgs = hargs["engine"]
     cfgs_number = len(engine_cfgs)
     if cfgs_number <= 100:
         instruction_checks.add(check)
         write_sby_file(check)
     else:
-        engine_cfgs = hargs["engine"]
         start_index = 0
         end_index = 100
         while end_index < cfgs_number:
@@ -827,12 +827,12 @@ def check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_
                     if enabled:
                         print(line, file=sby_file)
 
+    engine_cfgs = hargs["engine"]
     cfgs_number = len(engine_cfgs)
     if cfgs_number <= 100:
         consistency_checks.add(check)
         write_sby_file(check)
     else:
-        engine_cfgs = hargs["engine"]
         start_index = 0
         end_index = 100
         while end_index < cfgs_number:
