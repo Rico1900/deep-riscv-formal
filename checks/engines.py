@@ -151,4 +151,7 @@ def generate_engines():
                                 space(solver_cfg))
     return engines
 
-print(len(generate_engines()))
+def print_engine_number():
+    print(len(generate_engines()))
+
+print_engine_number()
