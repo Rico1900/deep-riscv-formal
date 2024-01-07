@@ -116,18 +116,26 @@ def generate_cvc5_configs():
     return configs
 
 def generate_solver_configs():
-    yices_configs = generate_yices_configs()
-    boolector_configs = generate_boolector_configs()
-    bitwuzla_configs = generate_bitwuzla_configs()
-    z3_configs = generate_z3_configs()
-    mathsat_configs = generate_mathsat_configs()
-    cvc5_configs = generate_cvc5_configs()
-    return (yices_configs |
-            boolector_configs |
-            bitwuzla_configs |
-            z3_configs |
-            mathsat_configs |
-            cvc5_configs)
+    # yices_configs = generate_yices_configs()
+    # boolector_configs = generate_boolector_configs()
+    # bitwuzla_configs = generate_bitwuzla_configs()
+    # z3_configs = generate_z3_configs()
+    # mathsat_configs = generate_mathsat_configs()
+    # cvc5_configs = generate_cvc5_configs()
+    # return (yices_configs |
+    #         boolector_configs |
+    #         bitwuzla_configs |
+    #         z3_configs |
+    #         mathsat_configs |
+    #         cvc5_configs)
+    return {
+        "yices",
+        "boolector",
+        "bitwuzla",
+        "z3",
+        "mathsat",
+        "cvc5"
+    }
 
 def generate_engines():
     engines = set()
