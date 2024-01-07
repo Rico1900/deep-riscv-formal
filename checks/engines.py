@@ -143,20 +143,26 @@ def generate_engines():
     engines.add("btor btormc")
     engines.add("btor pono")
     smt_engine = "smtbmc"
-    for mem_representation in ["--nomem", ""]:
-        for is_syn in ["--syn", ""]:
-            for is_big_vec in ["--stbv", ""]:
-                for is_presat in ["--nopresat", ""]:
-                    for is_unroll in ["--unroll", "--nounroll"]:
-                        for solver_cfg in generate_solver_configs():
-                            engines.add(
-                                space(smt_engine) +
-                                space(mem_representation) +
-                                space(is_syn) +
-                                space(is_big_vec) +
-                                space(is_presat) +
-                                space(is_unroll) +
-                                space(solver_cfg))
+    # for mem_representation in ["--nomem", ""]:
+    #     for is_syn in ["--syn", ""]:
+    #         for is_big_vec in ["--stbv", ""]:
+    #             for is_presat in ["--nopresat", ""]:
+    #                 for is_unroll in ["--unroll", "--nounroll"]:
+    #                     for solver_cfg in generate_solver_configs():
+    #                         engines.add(
+    #                             space(smt_engine) +
+    #                             space(mem_representation) +
+    #                             space(is_syn) +
+    #                             space(is_big_vec) +
+    #                             space(is_presat) +
+    #                             space(is_unroll) +
+    #                             space(solver_cfg))
+    for is_unroll in ["--unroll", "--nounroll"]:
+        for solver_cfg in generate_solver_configs():
+            engines.add(
+                space(smt_engine) +
+                space(is_unroll) +
+                space(solver_cfg))
     return engines
 
 def print_engine_number():
