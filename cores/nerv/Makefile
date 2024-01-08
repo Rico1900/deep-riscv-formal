@@ -33,7 +33,7 @@ testbench: testbench.sv nerv.sv
 
 checks:
 	python3 ../../checks/genchecks.py
-	$(MAKE) -C checks
+	$(MAKE) -k -C checks
 
 check: checks
 	bash cexdata.sh
