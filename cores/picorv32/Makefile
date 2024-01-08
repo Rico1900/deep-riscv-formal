@@ -4,7 +4,7 @@ picorv32.v:
 
 checks: picorv32.v
 	python3 ../../checks/genchecks.py
-	$(MAKE) -C checks
+	$(MAKE) -k -C checks
 
 check: checks
 	bash cexdata.sh
