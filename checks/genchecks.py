@@ -582,8 +582,11 @@ for grp in groups:
 
 # ------------------------------ Consistency Checkers ------------------------------
 
-def check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_mode=False, csr_test=None, bus_mode=False):
+def check_cons(grp, check, engine_cfg=None, chanidx=None, start=None, trig=None, depth=None, csr_mode=False, csr_test=None, bus_mode=False):
     pf = "" if grp is None else grp + "_"
+    engine_cfg_suffix = "" if engine_cfg is None else f"_{process_engine_cfg(engine_cfg)}"
+    if engine_cfg is not None:
+        hargs["engine"] = engine_cfg
     if csr_mode:
         csr_name = check
         if csr_test is not None:
@@ -668,7 +671,9 @@ def check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_
     if test_disabled(check): return
     consistency_checks.add(check)
 
-    with open(f"{cfgname}/{check}.sby", "w") as sby_file:
+    sby_file_name = f"{check}{engine_cfg_suffix}"
+
+    with open(f"{cfgname}/{sby_file_name}.sby", "w") as sby_file:
         print_hfmt(sby_file, """
                 : [options]
                 : mode @xmode@
@@ -824,10 +829,7 @@ def check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_
 def hypermode_check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_mode=False, csr_test=None, bus_mode=False):
     if hypermode == HyperMode.All:
         for c in all_engine_cfgs:
-            engine_cfg_suffix = "" if c is None else f"_{process_engine_cfg(c)}"
-            check_with_cfg = f"{check}{engine_cfg_suffix}"
-            hargs["engine"] = c
-            check_cons(grp, check_with_cfg, chanidx=chanidx, start=start, trig=trig, depth=depth, csr_mode=csr_mode, csr_test=csr_test, bus_mode=bus_mode)
+            check_cons(grp, check, engine_cfg=c, chanidx=chanidx, start=start, trig=trig, depth=depth, csr_mode=csr_mode, csr_test=csr_test, bus_mode=bus_mode)
     elif hypermode == HyperMode.Auto:
         pass
     elif hypermode == HyperMode.Manual:
