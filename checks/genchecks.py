@@ -16,7 +16,8 @@
 
 import os, sys, shutil, re
 from functools import reduce
-from util import none_str
+from util import process_engine_cfg
+from option import HyperMode
 from engines import generate_engines
 
 nret = 1
@@ -32,13 +33,6 @@ csr_tests = {}
 csr_spec = None
 compr = False
 timeout = 3600
-engines = [
-    "abc bmc3",
-    "abc sim3"
-    "btor btormc",
-    "btor pono",
-    ""
-]
 
 depths = list()
 groups = [None]
@@ -53,7 +47,7 @@ abspath = False
 sbycmd = "sby"
 config = dict()
 mode = "bmc"
-hypermode = "manual"
+hypermode = HyperMode.Manual
 
 if len(sys.argv) > 1:
     assert len(sys.argv) == 2
@@ -91,9 +85,14 @@ with open(f"{cfgname}.cfg", "r") as f:
                 config[cfgsection].append((cfgsubsection, line))
 
 if "hypermode" in config:
-    input = config["hypermode"].strip()
+    input = config["hypermode"].strip().lower()
     assert input in ["manual", "auto", "all"]
-    hypermode = input
+    if input == "auto":
+        hypermode = HyperMode.Auto
+    elif input == "all":
+        hypermode = HyperMode.All
+    else:
+        hypermode = HyperMode.Manual
 
 if "options" in config:
     for line in config["options"].split("\n"):
@@ -290,11 +289,11 @@ instruction_checks = set()
 consistency_checks = set()
 
 all_engine_cfgs = []
-if hypermode == "auto":
+if hypermode == HyperMode.Auto:
     pass
-elif hypermode == "all":
+elif hypermode == HyperMode.All:
     all_engine_cfgs = list(generate_engines())
-else: # manual hyper mode
+else:  # manual hyper mode
     if solver == "bmc3":
         hargs["engine"] = "abc bmc3"
         hargs["ilang_file"] = f"{corename}-gates.il"
@@ -362,11 +361,12 @@ def print_custom_csrs(sby_file):
 # ------------------------------ Instruction Checkers ------------------------------
 
 def check_insn(grp, insn, chanidx, engine_cfg=None, csr_mode=False, illegal_csr=False):
-    pf = "" if grp is None else grp+"_"
+    pf = "" if grp is None else grp + "_"
+    engine_cfg_suffix = "" if engine_cfg is None else f"_{process_engine_cfg(engine_cfg)}"
     if illegal_csr:
         (ill_addr, ill_modes, ill_rw) = insn
         insn = f"12'h{int(ill_addr, base=16):03X}"
-        check = f"{pf}csr_ill_{ill_addr}_ch{chanidx:d}"
+        check = f"{pf}csr_ill_{ill_addr}_ch{chanidx:d}{engine_cfg_suffix}"
         depth_cfg = get_depth_cfg([f"{pf}csr_ill", f"{pf}csr_ill_ch{chanidx:d}", f"{pf}csr_ill_{ill_addr}", f"{pf}csr_ill_{ill_addr}_ch{chanidx:d}"])
     else:
         if csr_mode:
@@ -374,12 +374,13 @@ def check_insn(grp, insn, chanidx, engine_cfg=None, csr_mode=False, illegal_csr=
         else:
             check = "insn"
         depth_cfg = get_depth_cfg([f"{pf}{check}", f"{pf}{check}_ch{chanidx:d}", f"{pf}{check}_{insn}", f"{pf}{check}_{insn}_ch{chanidx:d}"])
-        check = f"{pf}{check}_{insn}_ch{chanidx:d}_{none_str(engine_cfg)}"
+        check = f"{pf}{check}_{insn}_ch{chanidx:d}{engine_cfg_suffix}"
 
     if depth_cfg is None: return
     assert len(depth_cfg) == 1
 
     if test_disabled(check): return
+    instruction_checks.add(check)
 
     hargs["insn"] = insn
     hargs["checkch"] = check
@@ -387,209 +388,202 @@ def check_insn(grp, insn, chanidx, engine_cfg=None, csr_mode=False, illegal_csr=
     hargs["depth"] = depth_cfg[0]
     hargs["depth_plus"] = depth_cfg[0] + 1
     hargs["skip"] = depth_cfg[0]
+    hargs["engine"] = engine_cfg
 
-    def write_sby_file(file_name):
-        with open(f"{cfgname}/{file_name}.sby", "w") as sby_file:
-            print_hfmt(sby_file, """
-                    : [options]
-                    : mode @mode@
-                    : expect pass,fail
-                    : append @append@
-                    : depth @depth_plus@
-                    : timeout @timeout@
-                    :
-                    : [engines]
-                    : @engine@
-                    :
-                    : [script]
-            """, **hargs)
-    
-            if "script-defines" in config:
-                print_hfmt(sby_file, config["script-defines"], **hargs)
-    
-            sv_files = [f"{check}.sv"]
-            if "verilog-files" in config:
-                sv_files += hfmt(config["verilog-files"], **hargs)
-    
-            vhdl_files = []
-            if "vhdl-files" in config:
-                vhdl_files += hfmt(config["vhdl-files"], **hargs)
-    
-            if len(sv_files):
-                print(f"read -sv {' '.join(sv_files)}", file=sby_file)
-    
-            if len(vhdl_files):
-                print(f"read -vhdl {' '.join(vhdl_files)}", file=sby_file)
-    
-            if "script-sources" in config:
-                print_hfmt(sby_file, config["script-sources"], **hargs)
-    
-            print_hfmt(sby_file, """
-                    : prep -flatten -nordff -top rvfi_testbench
-            """, **hargs)
-    
-            if "script-link" in config:
-                print_hfmt(sby_file, config["script-link"], **hargs)
-    
-            print_hfmt(sby_file, """
-                    : chformal -early
-                    :
-                    : [files]
-                    : @basedir@/checks/rvfi_macros.vh
-                    : @basedir@/checks/rvfi_channel.sv
-                    : @basedir@/checks/rvfi_testbench.sv
-            """, **hargs)
-    
-            if illegal_csr:
-                print_hfmt(sby_file, """
-                        : @basedir@/checks/rvfi_csr_ill_check.sv
-                """, **hargs)
-            elif csr_mode:
-                print_hfmt(sby_file, """
-                        : @basedir@/checks/rvfi_csrw_check.sv
-                """, **hargs)
-            else:
-                print_hfmt(sby_file, """
-                        : @basedir@/checks/rvfi_insn_check.sv
-                        : @basedir@/insns/insn_@insn@.v
-                """, **hargs)
-    
-            print_hfmt(sby_file, """
-                    :
-                    : [file defines.sv]
-                    : `define RISCV_FORMAL
-                    : `define RISCV_FORMAL_NRET @nret@
-                    : `define RISCV_FORMAL_XLEN @xlen@
-                    : `define RISCV_FORMAL_ILEN @ilen@
-                    : `define RISCV_FORMAL_RESET_CYCLES 1
-                    : `define RISCV_FORMAL_CHECK_CYCLE @depth@
-                    : `define RISCV_FORMAL_CHANNEL_IDX @channel@
-            """, **hargs)
-    
-            if "assume" in config:
-                print("`define RISCV_FORMAL_ASSUME", file=sby_file)
-    
-            if mode == "prove":
-                print("`define RISCV_FORMAL_UNBOUNDED", file=sby_file)
-    
-            for csr in sorted(csrs):
-                print(f"`define RISCV_FORMAL_CSR_{csr.upper()}", file=sby_file)
-    
-            if csr_mode and insn in ("mcycle", "minstret"):
-                print("`define RISCV_FORMAL_CSRWH", file=sby_file)
-    
-            if illegal_csr:
-                print_hfmt(sby_file, """
-                        : `define RISCV_FORMAL_CHECKER rvfi_csr_ill_check
-                        : `define RISCV_FORMAL_ILL_CSR_ADDR @insn@
-                """, **hargs)
-                if 'm' in ill_modes:
-                    print("`define RISCV_FORMAL_ILL_MMODE", file=sby_file)
-                if 's' in ill_modes:
-                    print("`define RISCV_FORMAL_ILL_SMODE", file=sby_file)
-                if 'u' in ill_modes:
-                    print("`define RISCV_FORMAL_ILL_UMODE", file=sby_file)
-                if 'r' in ill_rw:
-                    print("`define RISCV_FORMAL_ILL_READ", file=sby_file)
-                if 'w' in ill_rw:
-                    print("`define RISCV_FORMAL_ILL_WRITE", file=sby_file)
-            elif csr_mode:
-                print_hfmt(sby_file, """
-                        : `define RISCV_FORMAL_CHECKER rvfi_csrw_check
-                        : `define RISCV_FORMAL_CSRW_NAME @insn@
-                """, **hargs)
-            else:
-                print_hfmt(sby_file, """
-                        : `define RISCV_FORMAL_CHECKER rvfi_insn_check
-                        : `define RISCV_FORMAL_INSN_MODEL rvfi_insn_@insn@
-                """, **hargs)
-    
-            if custom_csrs:
-                print_custom_csrs(sby_file)
-    
-            if blackbox:
-                print("`define RISCV_FORMAL_BLACKBOX_REGS", file=sby_file)
-    
-            if compr:
-                print("`define RISCV_FORMAL_COMPRESSED", file=sby_file)
-    
-            if "defines" in config:
-                print_hfmt(sby_file, config["defines"], **hargs)
-    
-            print_hfmt(sby_file, """
-                    : `include "rvfi_macros.vh"
-                    :
-                    : [file @checkch@.sv]
-                    : `include "defines.sv"
-                    : `include "rvfi_channel.sv"
-                    : `include "rvfi_testbench.sv"
-            """, **hargs)
-    
-            if illegal_csr:
-                print_hfmt(sby_file, """
-                        : `include "rvfi_csr_ill_check.sv"
-                """, **hargs)
-            elif csr_mode:
-                print_hfmt(sby_file, """
-                        : `include "rvfi_csrw_check.sv"
-                """, **hargs)
-            else:
-                print_hfmt(sby_file, """
-                        : `include "rvfi_insn_check.sv"
-                        : `include "insn_@insn@.v"
-                """, **hargs)
-    
-            if "assume" in config:
-                print("", file=sby_file)
-                print("[file assume_stmts.vh]", file=sby_file)
-                for pat, line in config["assume"]:
-                    enabled = True
-                    for p in pat:
-                        if p.startswith("!"):
-                            p = p[1:]
-                            enabled = False
-                        else:
-                            enabled = True
-                        if re.match(p, file_name):
-                            enabled = not enabled
-                            break
-                    if enabled:
-                        print(line, file=sby_file)
+    with open(f"{cfgname}/{check}.sby", "w") as sby_file:
+        print_hfmt(sby_file, """
+                : [options]
+                : mode @mode@
+                : expect pass,fail
+                : append @append@
+                : depth @depth_plus@
+                : timeout @timeout@
+                :
+                : [engines]
+                : @engine@
+                :
+                : [script]
+        """, **hargs)
 
-    cfgs_number = len(all_engine_cfgs)
-    if cfgs_number <= 100:
-        instruction_checks.add(check)
-        hargs["engine"] = "\n".join(all_engine_cfgs)
-        write_sby_file(check)
-    else:
-        start_index = 0
-        end_index = 100
-        while end_index < cfgs_number:
-            partition_fname = f"{check}_{start_index}_{end_index}"
-            instruction_checks.add(partition_fname)
-            hargs["engine"] = "\n".join(all_engine_cfgs[start_index:end_index])
-            write_sby_file(partition_fname)
-            start_index = start_index + 100
-            end_index = end_index + 100
+        if "script-defines" in config:
+            print_hfmt(sby_file, config["script-defines"], **hargs)
+
+        sv_files = [f"{check}.sv"]
+        if "verilog-files" in config:
+            sv_files += hfmt(config["verilog-files"], **hargs)
+
+        vhdl_files = []
+        if "vhdl-files" in config:
+            vhdl_files += hfmt(config["vhdl-files"], **hargs)
+
+        if len(sv_files):
+            print(f"read -sv {' '.join(sv_files)}", file=sby_file)
+
+        if len(vhdl_files):
+            print(f"read -vhdl {' '.join(vhdl_files)}", file=sby_file)
+
+        if "script-sources" in config:
+            print_hfmt(sby_file, config["script-sources"], **hargs)
+
+        print_hfmt(sby_file, """
+                : prep -flatten -nordff -top rvfi_testbench
+        """, **hargs)
+
+        if "script-link" in config:
+            print_hfmt(sby_file, config["script-link"], **hargs)
+
+        print_hfmt(sby_file, """
+                : chformal -early
+                :
+                : [files]
+                : @basedir@/checks/rvfi_macros.vh
+                : @basedir@/checks/rvfi_channel.sv
+                : @basedir@/checks/rvfi_testbench.sv
+        """, **hargs)
+
+        if illegal_csr:
+            print_hfmt(sby_file, """
+                    : @basedir@/checks/rvfi_csr_ill_check.sv
+            """, **hargs)
+        elif csr_mode:
+            print_hfmt(sby_file, """
+                    : @basedir@/checks/rvfi_csrw_check.sv
+            """, **hargs)
+        else:
+            print_hfmt(sby_file, """
+                    : @basedir@/checks/rvfi_insn_check.sv
+                    : @basedir@/insns/insn_@insn@.v
+            """, **hargs)
+
+        print_hfmt(sby_file, """
+                :
+                : [file defines.sv]
+                : `define RISCV_FORMAL
+                : `define RISCV_FORMAL_NRET @nret@
+                : `define RISCV_FORMAL_XLEN @xlen@
+                : `define RISCV_FORMAL_ILEN @ilen@
+                : `define RISCV_FORMAL_RESET_CYCLES 1
+                : `define RISCV_FORMAL_CHECK_CYCLE @depth@
+                : `define RISCV_FORMAL_CHANNEL_IDX @channel@
+        """, **hargs)
+
+        if "assume" in config:
+            print("`define RISCV_FORMAL_ASSUME", file=sby_file)
+
+        if mode == "prove":
+            print("`define RISCV_FORMAL_UNBOUNDED", file=sby_file)
+
+        for csr in sorted(csrs):
+            print(f"`define RISCV_FORMAL_CSR_{csr.upper()}", file=sby_file)
+
+        if csr_mode and insn in ("mcycle", "minstret"):
+            print("`define RISCV_FORMAL_CSRWH", file=sby_file)
+
+        if illegal_csr:
+            print_hfmt(sby_file, """
+                    : `define RISCV_FORMAL_CHECKER rvfi_csr_ill_check
+                    : `define RISCV_FORMAL_ILL_CSR_ADDR @insn@
+            """, **hargs)
+            if 'm' in ill_modes:
+                print("`define RISCV_FORMAL_ILL_MMODE", file=sby_file)
+            if 's' in ill_modes:
+                print("`define RISCV_FORMAL_ILL_SMODE", file=sby_file)
+            if 'u' in ill_modes:
+                print("`define RISCV_FORMAL_ILL_UMODE", file=sby_file)
+            if 'r' in ill_rw:
+                print("`define RISCV_FORMAL_ILL_READ", file=sby_file)
+            if 'w' in ill_rw:
+                print("`define RISCV_FORMAL_ILL_WRITE", file=sby_file)
+        elif csr_mode:
+            print_hfmt(sby_file, """
+                    : `define RISCV_FORMAL_CHECKER rvfi_csrw_check
+                    : `define RISCV_FORMAL_CSRW_NAME @insn@
+            """, **hargs)
+        else:
+            print_hfmt(sby_file, """
+                    : `define RISCV_FORMAL_CHECKER rvfi_insn_check
+                    : `define RISCV_FORMAL_INSN_MODEL rvfi_insn_@insn@
+            """, **hargs)
+
+        if custom_csrs:
+            print_custom_csrs(sby_file)
+
+        if blackbox:
+            print("`define RISCV_FORMAL_BLACKBOX_REGS", file=sby_file)
+
+        if compr:
+            print("`define RISCV_FORMAL_COMPRESSED", file=sby_file)
+
+        if "defines" in config:
+            print_hfmt(sby_file, config["defines"], **hargs)
+
+        print_hfmt(sby_file, """
+                : `include "rvfi_macros.vh"
+                :
+                : [file @checkch@.sv]
+                : `include "defines.sv"
+                : `include "rvfi_channel.sv"
+                : `include "rvfi_testbench.sv"
+        """, **hargs)
+
+        if illegal_csr:
+            print_hfmt(sby_file, """
+                    : `include "rvfi_csr_ill_check.sv"
+            """, **hargs)
+        elif csr_mode:
+            print_hfmt(sby_file, """
+                    : `include "rvfi_csrw_check.sv"
+            """, **hargs)
+        else:
+            print_hfmt(sby_file, """
+                    : `include "rvfi_insn_check.sv"
+                    : `include "insn_@insn@.v"
+            """, **hargs)
+
+        if "assume" in config:
+            print("", file=sby_file)
+            print("[file assume_stmts.vh]", file=sby_file)
+            for pat, line in config["assume"]:
+                enabled = True
+                for p in pat:
+                    if p.startswith("!"):
+                        p = p[1:]
+                        enabled = False
+                    else:
+                        enabled = True
+                    if re.match(p, check):
+                        enabled = not enabled
+                        break
+                if enabled:
+                    print(line, file=sby_file)
+
+def hypermode_check_insn(grp, insn, chanidx, csr_mode=False, illegal_csr=False):
+    if hypermode == HyperMode.All:
+        for c in all_engine_cfgs:
+            check_insn(grp, insn, chanidx, engine_cfg=c, csr_mode=csr_mode, illegal_csr=illegal_csr)
+    elif hypermode == HyperMode.Auto:
+        pass
+    elif hypermode == HyperMode.Manual:
+        check_insn(grp, insn, chanidx, engine_cfg=None, csr_mode=csr_mode, illegal_csr=illegal_csr)
 
 for grp in groups:
     with open(f"../../insns/isa_{isa}.txt") as isa_file:
         for insn in isa_file:
             for chanidx in range(nret):
-                check_insn(grp, insn.strip(), chanidx)
+                hypermode_check_insn(grp, insn.strip(), chanidx)
 
     for csr in sorted(csrs):
         for chanidx in range(nret):
-            check_insn(grp, csr, chanidx, csr_mode=True)
+            hypermode_check_insn(grp, csr, chanidx, csr_mode=True)
 
     for ill_csr in sorted(illegal_csrs, key=lambda csr: csr[0]):
         for chanidx in range(nret):
-            check_insn(grp, ill_csr, chanidx, illegal_csr=True)
+            hypermode_check_insn(grp, ill_csr, chanidx, illegal_csr=True)
 
 # ------------------------------ Consistency Checkers ------------------------------
 
 def check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_mode=False, csr_test=None, bus_mode=False):
-    pf = "" if grp is None else grp+"_"
+    pf = "" if grp is None else grp + "_"
     if csr_mode:
         csr_name = check
         if csr_test is not None:
@@ -672,207 +666,203 @@ def check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_
     if check == "cover" or "csrc_hpm" in check: hargs["xmode"] = "cover"
 
     if test_disabled(check): return
+    consistency_checks.add(check)
 
-    def write_sby_file(file_name):
-        with open(f"{cfgname}/{file_name}.sby", "w") as sby_file:
+    with open(f"{cfgname}/{check}.sby", "w") as sby_file:
+        print_hfmt(sby_file, """
+                : [options]
+                : mode @xmode@
+                : expect pass,fail
+                : append @append@
+                : depth @depth_plus@
+                : timeout @timeout@
+                :
+                : [engines]
+                : @engine@
+                :
+                : [script]
+        """, **hargs)
+
+        if "script-defines" in config:
+            print_hfmt(sby_file, config["script-defines"], **hargs)
+
+        if (f"script-defines {hargs['check']}") in config:
+            print_hfmt(sby_file, config[f"script-defines {hargs['check']}"], **hargs)
+
+        sv_files = [f"{check}.sv"]
+        if "verilog-files" in config:
+            sv_files += hfmt(config["verilog-files"], **hargs)
+
+        vhdl_files = []
+        if "vhdl-files" in config:
+            vhdl_files += hfmt(config["vhdl-files"], **hargs)
+
+        if len(sv_files):
+            print(f"read -sv {' '.join(sv_files)}", file=sby_file)
+
+        if len(vhdl_files):
+            print(f"read -vhdl {' '.join(vhdl_files)}", file=sby_file)
+
+        if "script-sources" in config:
+            print_hfmt(sby_file, config["script-sources"], **hargs)
+
+        print_hfmt(sby_file, """
+                : prep -flatten -nordff -top rvfi_testbench
+        """, **hargs)
+
+        if "script-link" in config:
+            print_hfmt(sby_file, config["script-link"], **hargs)
+
+        print_hfmt(sby_file, """
+                : chformal -early
+                :
+                : [files]
+                : @basedir@/checks/rvfi_macros.vh
+                : @basedir@/checks/rvfi_channel.sv
+                : @basedir@/checks/rvfi_testbench.sv
+                : @basedir@/checks/rvfi_@check@_check.sv
+                :
+                : [file defines.sv]
+        """, **hargs)
+
+        print_hfmt(sby_file, """
+                : `define RISCV_FORMAL
+                : `define RISCV_FORMAL_NRET @nret@
+                : `define RISCV_FORMAL_XLEN @xlen@
+                : `define RISCV_FORMAL_ILEN @ilen@
+                : `define RISCV_FORMAL_CHECKER rvfi_@check@_check
+                : `define RISCV_FORMAL_RESET_CYCLES @start@
+                : `define RISCV_FORMAL_CHECK_CYCLE @depth@
+        """, **hargs)
+
+        if "assume" in config:
+            print("`define RISCV_FORMAL_ASSUME", file=sby_file)
+
+        if mode == "prove":
+            print("`define RISCV_FORMAL_UNBOUNDED", file=sby_file)
+
+        for csr in sorted(csrs):
+            print(f"`define RISCV_FORMAL_CSR_{csr.upper()}", file=sby_file)
+
+        if csr_mode:
+            localdict = locals()
+            if "constval" in localdict:
+                print(f"`define RISCV_FORMAL_CSRC_CONSTVAL {constval}", file=sby_file)
+            if "hpmevent" in localdict:
+                print(f"`define RISCV_FORMAL_CSRC_HPMEVENT {hpmevent}", file=sby_file)
+            if "hpmcounter" in localdict:
+                print(f"`define RISCV_FORMAL_CSRC_HPMCOUNTER {hpmcounter}", file=sby_file)
+            if "csr_mask" in localdict:
+                print(f"`define RISCV_FORMAL_CSRC_MASK {csr_mask}", file=sby_file)
+            print(f"`define RISCV_FORMAL_CSRC_NAME {csr_name}", file=sby_file)
+
+        if custom_csrs:
+            print_custom_csrs(sby_file)
+
+        if blackbox and hargs["check"] != "liveness":
+            print("`define RISCV_FORMAL_BLACKBOX_ALU", file=sby_file)
+
+        if blackbox and hargs["check"] != "reg":
+            print("`define RISCV_FORMAL_BLACKBOX_REGS", file=sby_file)
+
+        if chanidx is not None:
+            print(f"`define RISCV_FORMAL_CHANNEL_IDX {chanidx:d}", file=sby_file)
+
+        if trig is not None:
+            print(f"`define RISCV_FORMAL_TRIG_CYCLE {trig:d}", file=sby_file)
+
+        if bus_mode:
             print_hfmt(sby_file, """
-                    : [options]
-                    : mode @xmode@
-                    : expect pass,fail
-                    : append @append@
-                    : depth @depth_plus@
-                    : timeout @timeout@
-                    :
-                    : [engines]
-                    : @engine@
-                    :
-                    : [script]
+                    : `define RISCV_FORMAL_BUS
+                    : `define RISCV_FORMAL_NBUS @nbus@
+                    : `define RISCV_FORMAL_BUSLEN @buslen@
             """, **hargs)
 
-            if "script-defines" in config:
-                print_hfmt(sby_file, config["script-defines"], **hargs)
+        if hargs["check"] in ("liveness", "hang"):
+            print("`define RISCV_FORMAL_FAIRNESS", file=sby_file)
 
-            if (f"script-defines {hargs['check']}") in config:
-                print_hfmt(sby_file, config[f"script-defines {hargs['check']}"], **hargs)
+        if "defines" in config:
+            print_hfmt(sby_file, config["defines"], **hargs)
 
-            sv_files = [f"{check}.sv"]
-            if "verilog-files" in config:
-                sv_files += hfmt(config["verilog-files"], **hargs)
+        if (f"defines {hargs['check']}") in config:
+            print_hfmt(sby_file, config[f"defines {hargs['check']}"], **hargs)
 
-            vhdl_files = []
-            if "vhdl-files" in config:
-                vhdl_files += hfmt(config["vhdl-files"], **hargs)
+        print_hfmt(sby_file, """
+                : `include "rvfi_macros.vh"
+                :
+                : [file @checkch@.sv]
+                : `include "defines.sv"
+                : `include "rvfi_channel.sv"
+                : `include "rvfi_testbench.sv"
+                : `include "rvfi_@check@_check.sv"
+        """, **hargs)
 
-            if len(sv_files):
-                print(f"read -sv {' '.join(sv_files)}", file=sby_file)
-
-            if len(vhdl_files):
-                print(f"read -vhdl {' '.join(vhdl_files)}", file=sby_file)
-
-            if "script-sources" in config:
-                print_hfmt(sby_file, config["script-sources"], **hargs)
-
+        if check == pf+"cover":
             print_hfmt(sby_file, """
-                    : prep -flatten -nordff -top rvfi_testbench
-            """, **hargs)
-
-            if "script-link" in config:
-                print_hfmt(sby_file, config["script-link"], **hargs)
-
-            print_hfmt(sby_file, """
-                    : chformal -early
                     :
-                    : [files]
-                    : @basedir@/checks/rvfi_macros.vh
-                    : @basedir@/checks/rvfi_channel.sv
-                    : @basedir@/checks/rvfi_testbench.sv
-                    : @basedir@/checks/rvfi_@check@_check.sv
-                    :
-                    : [file defines.sv]
+                    : [file cover_stmts.vh]
+                    : @cover@
             """, **hargs)
 
-            print_hfmt(sby_file, """
-                    : `define RISCV_FORMAL
-                    : `define RISCV_FORMAL_NRET @nret@
-                    : `define RISCV_FORMAL_XLEN @xlen@
-                    : `define RISCV_FORMAL_ILEN @ilen@
-                    : `define RISCV_FORMAL_CHECKER rvfi_@check@_check
-                    : `define RISCV_FORMAL_RESET_CYCLES @start@
-                    : `define RISCV_FORMAL_CHECK_CYCLE @depth@
-            """, **hargs)
+        if "assume" in config:
+            print("", file=sby_file)
+            print("[file assume_stmts.vh]", file=sby_file)
+            for pat, line in config["assume"]:
+                enabled = True
+                for p in pat:
+                    if p.startswith("!"):
+                        p = p[1:]
+                        enabled = False
+                    else:
+                        enabled = True
+                    if re.match(p, check):
+                        enabled = not enabled
+                        break
+                if enabled:
+                    print(line, file=sby_file)
 
-            if "assume" in config:
-                print("`define RISCV_FORMAL_ASSUME", file=sby_file)
-
-            if mode == "prove":
-                print("`define RISCV_FORMAL_UNBOUNDED", file=sby_file)
-
-            for csr in sorted(csrs):
-                print(f"`define RISCV_FORMAL_CSR_{csr.upper()}", file=sby_file)
-
-            if csr_mode:
-                localdict = locals()
-                if "constval" in localdict:
-                    print(f"`define RISCV_FORMAL_CSRC_CONSTVAL {constval}", file=sby_file)
-                if "hpmevent" in localdict:
-                    print(f"`define RISCV_FORMAL_CSRC_HPMEVENT {hpmevent}", file=sby_file)
-                if "hpmcounter" in localdict:
-                    print(f"`define RISCV_FORMAL_CSRC_HPMCOUNTER {hpmcounter}", file=sby_file)
-                if "csr_mask" in localdict:
-                    print(f"`define RISCV_FORMAL_CSRC_MASK {csr_mask}", file=sby_file)
-                print(f"`define RISCV_FORMAL_CSRC_NAME {csr_name}", file=sby_file)
-
-            if custom_csrs:
-                print_custom_csrs(sby_file)
-
-            if blackbox and hargs["check"] != "liveness":
-                print("`define RISCV_FORMAL_BLACKBOX_ALU", file=sby_file)
-
-            if blackbox and hargs["check"] != "reg":
-                print("`define RISCV_FORMAL_BLACKBOX_REGS", file=sby_file)
-
-            if chanidx is not None:
-                print(f"`define RISCV_FORMAL_CHANNEL_IDX {chanidx:d}", file=sby_file)
-
-            if trig is not None:
-                print(f"`define RISCV_FORMAL_TRIG_CYCLE {trig:d}", file=sby_file)
-
-            if bus_mode:
-                print_hfmt(sby_file, """
-                        : `define RISCV_FORMAL_BUS
-                        : `define RISCV_FORMAL_NBUS @nbus@
-                        : `define RISCV_FORMAL_BUSLEN @buslen@
-                """, **hargs)
-
-            if hargs["check"] in ("liveness", "hang"):
-                print("`define RISCV_FORMAL_FAIRNESS", file=sby_file)
-
-            if "defines" in config:
-                print_hfmt(sby_file, config["defines"], **hargs)
-
-            if (f"defines {hargs['check']}") in config:
-                print_hfmt(sby_file, config[f"defines {hargs['check']}"], **hargs)
-
-            print_hfmt(sby_file, """
-                    : `include "rvfi_macros.vh"
-                    :
-                    : [file @checkch@.sv]
-                    : `include "defines.sv"
-                    : `include "rvfi_channel.sv"
-                    : `include "rvfi_testbench.sv"
-                    : `include "rvfi_@check@_check.sv"
-            """, **hargs)
-
-            if check == pf+"cover":
-                print_hfmt(sby_file, """
-                        :
-                        : [file cover_stmts.vh]
-                        : @cover@
-                """, **hargs)
-
-            if "assume" in config:
-                print("", file=sby_file)
-                print("[file assume_stmts.vh]", file=sby_file)
-                for pat, line in config["assume"]:
-                    enabled = True
-                    for p in pat:
-                        if p.startswith("!"):
-                            p = p[1:]
-                            enabled = False
-                        else:
-                            enabled = True
-                        if re.match(p, file_name):
-                            enabled = not enabled
-                            break
-                    if enabled:
-                        print(line, file=sby_file)
-
-    cfgs_number = len(all_engine_cfgs)
-    if cfgs_number <= 100:
-        consistency_checks.add(check)
-        hargs["engine"] = "\n".join(all_engine_cfgs)
-        write_sby_file(check)
-    else:
-        start_index = 0
-        end_index = 100
-        while end_index < cfgs_number:
-            partition_fname = f"{check}_{start_index}_{end_index}"
-            consistency_checks.add(partition_fname)
-            hargs["engine"] = "\n".join(all_engine_cfgs[start_index:end_index])
-            write_sby_file(partition_fname)
-            start_index = start_index + 100
-            end_index = end_index + 100
+def hypermode_check_cons(grp, check, chanidx=None, start=None, trig=None, depth=None, csr_mode=False, csr_test=None, bus_mode=False):
+    if hypermode == HyperMode.All:
+        for c in all_engine_cfgs:
+            engine_cfg_suffix = "" if c is None else f"_{process_engine_cfg(c)}"
+            check_with_cfg = f"{check}{engine_cfg_suffix}"
+            hargs["engine"] = c
+            check_cons(grp, check_with_cfg, chanidx=chanidx, start=start, trig=trig, depth=depth, csr_mode=csr_mode, csr_test=csr_test, bus_mode=bus_mode)
+    elif hypermode == HyperMode.Auto:
+        pass
+    elif hypermode == HyperMode.Manual:
+        check_cons(grp, check, chanidx=chanidx, start=start, trig=trig, depth=depth, csr_mode=csr_mode, csr_test=csr_test, bus_mode=bus_mode)
 
 for grp in groups:
     for i in range(nret):
-        check_cons(grp, "reg", chanidx=i, start=0, depth=1)
-        check_cons(grp, "pc_fwd", chanidx=i, start=0, depth=1)
-        check_cons(grp, "pc_bwd", chanidx=i, start=0, depth=1)
-        check_cons(grp, "liveness", chanidx=i, start=0, trig=1, depth=2)
-        check_cons(grp, "unique", chanidx=i, start=0, trig=1, depth=2)
-        check_cons(grp, "causal", chanidx=i, start=0, depth=1)
-        check_cons(grp, "causal_mem", chanidx=i, start=0, depth=1)
-        check_cons(grp, "causal_io", chanidx=i, start=0, depth=1)
-        check_cons(grp, "ill", chanidx=i, depth=0)
-        check_cons(grp, "fault", chanidx=i, depth=0)
+        hypermode_check_cons(grp, "reg", chanidx=i, start=0, depth=1)
+        hypermode_check_cons(grp, "pc_fwd", chanidx=i, start=0, depth=1)
+        hypermode_check_cons(grp, "pc_bwd", chanidx=i, start=0, depth=1)
+        hypermode_check_cons(grp, "liveness", chanidx=i, start=0, trig=1, depth=2)
+        hypermode_check_cons(grp, "unique", chanidx=i, start=0, trig=1, depth=2)
+        hypermode_check_cons(grp, "causal", chanidx=i, start=0, depth=1)
+        hypermode_check_cons(grp, "causal_mem", chanidx=i, start=0, depth=1)
+        hypermode_check_cons(grp, "causal_io", chanidx=i, start=0, depth=1)
+        hypermode_check_cons(grp, "ill", chanidx=i, depth=0)
+        hypermode_check_cons(grp, "fault", chanidx=i, depth=0)
 
-        check_cons(grp, "bus_imem", chanidx=i, start=0, depth=1, bus_mode=True)
-        check_cons(grp, "bus_imem_fault", chanidx=i, start=0, depth=1, bus_mode=True)
-        check_cons(grp, "bus_dmem", chanidx=i, start=0, depth=1, bus_mode=True)
-        check_cons(grp, "bus_dmem_fault", chanidx=i, start=0, depth=1, bus_mode=True)
-        check_cons(grp, "bus_dmem_io_read", chanidx=i, start=0, depth=1, bus_mode=True)
-        check_cons(grp, "bus_dmem_io_read_fault", chanidx=i, start=0, depth=1, bus_mode=True)
-        check_cons(grp, "bus_dmem_io_write", chanidx=i, start=0, depth=1, bus_mode=True)
-        check_cons(grp, "bus_dmem_io_write_fault", chanidx=i, start=0, depth=1, bus_mode=True)
-        check_cons(grp, "bus_dmem_io_order", chanidx=i, start=0, depth=1, bus_mode=True)
+        hypermode_check_cons(grp, "bus_imem", chanidx=i, start=0, depth=1, bus_mode=True)
+        hypermode_check_cons(grp, "bus_imem_fault", chanidx=i, start=0, depth=1, bus_mode=True)
+        hypermode_check_cons(grp, "bus_dmem", chanidx=i, start=0, depth=1, bus_mode=True)
+        hypermode_check_cons(grp, "bus_dmem_fault", chanidx=i, start=0, depth=1, bus_mode=True)
+        hypermode_check_cons(grp, "bus_dmem_io_read", chanidx=i, start=0, depth=1, bus_mode=True)
+        hypermode_check_cons(grp, "bus_dmem_io_read_fault", chanidx=i, start=0, depth=1, bus_mode=True)
+        hypermode_check_cons(grp, "bus_dmem_io_write", chanidx=i, start=0, depth=1, bus_mode=True)
+        hypermode_check_cons(grp, "bus_dmem_io_write_fault", chanidx=i, start=0, depth=1, bus_mode=True)
+        hypermode_check_cons(grp, "bus_dmem_io_order", chanidx=i, start=0, depth=1, bus_mode=True)
 
-    check_cons(grp, "hang", start=0, depth=1)
-    check_cons(grp, "cover", start=0, depth=1)
+    hypermode_check_cons(grp, "hang", start=0, depth=1)
+    hypermode_check_cons(grp, "cover", start=0, depth=1)
 
     for csr in sorted(csrs):
         for chanidx in range(nret):
             for csr_test in csr_tests.get(csr, [None]):
-                check_cons(grp, csr, chanidx, start=0, depth=1, csr_mode=True, csr_test=csr_test)
+                hypermode_check_cons(grp, csr, chanidx, start=0, depth=1, csr_mode=True, csr_test=csr_test)
 
 # ------------------------------ Makefile ------------------------------
 
