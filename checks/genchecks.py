@@ -388,7 +388,8 @@ def check_insn(grp, insn, chanidx, engine_cfg=None, csr_mode=False, illegal_csr=
     hargs["depth"] = depth_cfg[0]
     hargs["depth_plus"] = depth_cfg[0] + 1
     hargs["skip"] = depth_cfg[0]
-    hargs["engine"] = engine_cfg
+    if engine_cfg is not None:
+        hargs["engine"] = engine_cfg
 
     with open(f"{cfgname}/{check}.sby", "w") as sby_file:
         print_hfmt(sby_file, """
