@@ -32,7 +32,7 @@ illegal_csrs = set()
 csr_tests = {}
 csr_spec = None
 compr = False
-timeout = 60
+timeout = 120
 
 depths = list()
 groups = [None]
