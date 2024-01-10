@@ -1,8 +1,9 @@
 import argparse
 import os
 from pathlib import Path
-from logfile_parser import clock_time_summary
+from logfile_parser import clock_time_summary, EnginePerformance
 from parsy import ParseError
+from config.constant import TIMEOUT
 
 
 def traverse_folder(directory: str):
@@ -24,6 +25,7 @@ def traverse_folder(directory: str):
                     except ParseError:
                         continue
                 if not_found:
+                    result.append(EnginePerformance(name=name, time_consumption=TIMEOUT))
                     print(f"{log_file_path} does not contains clock time summary")
     return result
 

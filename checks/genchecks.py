@@ -19,6 +19,7 @@ from functools import reduce
 from util import process_engine_cfg
 from option import HyperMode
 from engines import generate_engines
+from config.constant import TIMEOUT
 
 nret = 1
 isa = "rv32i"
@@ -32,7 +33,7 @@ illegal_csrs = set()
 csr_tests = {}
 csr_spec = None
 compr = False
-timeout = 120
+timeout = TIMEOUT
 
 depths = list()
 groups = [None]
