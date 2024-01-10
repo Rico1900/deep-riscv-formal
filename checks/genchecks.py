@@ -672,7 +672,7 @@ def check_cons(grp, check, engine_cfg=None, chanidx=None, start=None, trig=None,
     if test_disabled(check): return
 
     sby_file_name = f"{check}{engine_cfg_suffix}"
-    consistency_checks.add(check)
+    consistency_checks.add(sby_file_name)
 
     with open(f"{cfgname}/{sby_file_name}.sby", "w") as sby_file:
         print_hfmt(sby_file, """
