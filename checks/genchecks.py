@@ -670,9 +670,9 @@ def check_cons(grp, check, engine_cfg=None, chanidx=None, start=None, trig=None,
     if check == "cover" or "csrc_hpm" in check: hargs["xmode"] = "cover"
 
     if test_disabled(check): return
-    consistency_checks.add(check)
 
     sby_file_name = f"{check}{engine_cfg_suffix}"
+    consistency_checks.add(check)
 
     with open(f"{cfgname}/{sby_file_name}.sby", "w") as sby_file:
         print_hfmt(sby_file, """
