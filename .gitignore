@@ -2,3 +2,6 @@
 
 # VS Code
 .idea
+
+# python
+*.pyc

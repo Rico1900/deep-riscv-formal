@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from logfile_parser import clock_time_summary, EnginePerformance
+from data.logfile_parser import clock_time_summary, EnginePerformance
 from parsy import ParseError
 from config.constant import TIMEOUT
 
