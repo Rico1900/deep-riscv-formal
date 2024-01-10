@@ -1,7 +1,7 @@
 import argparse
 import os
 from pathlib import Path
-from data.logfile_parser import clock_time_summary
+from logfile_parser import clock_time_summary
 from parsy import ParseError
 
 
