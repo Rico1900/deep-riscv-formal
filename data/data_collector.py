@@ -14,13 +14,17 @@ def traverse_folder(directory: str):
             log_file_path = file_path.joinpath(Path("logfile.txt"))
             with log_file_path.open("r") as log_file:
                 content = log_file.read()
+                not_found = True
                 for line in content.split("\n"):
                     try:
                         data = clock_time_summary.parse(line)
                         result.append(data)
+                        not_found = False
+                        break
                     except ParseError:
                         continue
-                print(f"{log_file_path} does not contains clock time summary")
+                if not_found:
+                    print(f"{log_file_path} does not contains clock time summary")
     return result
 
 
