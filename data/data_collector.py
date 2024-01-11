@@ -21,10 +21,24 @@ class Group:
     task_name: str
     statistics: list[Item]
 
+    def champion(self) -> Item:
+        return min(self.statistics, key=lambda i: i.time_consumption)
+
     def __str__(self):
         details = reduce(lambda u, d: u + "\n" + d,
                          map(lambda i: f"\t{str(i)}", self.statistics))
-        return f"task name: {self.task_name}\n{details}"
+        return f"Task Name: {self.task_name}\n{details}"
+
+
+@dataclass
+class Statistics:
+    summary: dict[str, int]
+    details: list[Group]
+
+    def __str__(self):
+        summary = reduce(lambda acc, s: f"{acc}\tconfig={s[0]}, count={s[1]}\n", self.summary.items(), "")
+        groups = reduce(lambda acc, g: f"{acc}\n\n{g}", self.details, "")
+        return f"Summary:\n{summary}{groups}"
 
 
 def traverse_folder(directory: str):
@@ -51,14 +65,21 @@ def traverse_folder(directory: str):
     return result
 
 
-def sort_statistics(data: list[EnginePerformance]) -> list[Group]:
+def generate_statistics(data: list[EnginePerformance]) -> Statistics:
     groups = dict()
     for log in data:
         if log.task_name not in groups:
             groups[log.task_name] = []
         groups[log.task_name].append(Item(checking_config=log.checking_config, time_consumption=log.time_consumption))
-    result = []
+    summary = dict()
+    detail = []
     for k, v in groups.items():
         v.sort(key=lambda i: i.checking_config)
-        result.append(Group(task_name=k, statistics=v))
-    return result
+        group = Group(task_name=k, statistics=v)
+        champion = group.champion()
+        if champion.checking_config not in summary:
+            summary[champion.checking_config] = 1
+        else:
+            summary[champion.checking_config] += 1
+        detail.append(group)
+    return Statistics(summary=summary, details=detail)
