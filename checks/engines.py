@@ -1,15 +1,18 @@
 bools = ['true', "false"]
 
+
 def space(s):
     if s == "":
         return ""
     else:
         return s + " "
 
+
 # it seems that current sby does not support yices configurations
 # requires further investigation
 def generate_yices_configs():
     return {"yices"}
+
 
 def generate_boolector_configs():
     configs = set()
@@ -63,6 +66,7 @@ def generate_boolector_configs():
                                 space(fsl_cfg))                                                              
     return configs
 
+
 def generate_bitwuzla_configs():
     configs = set()
     bitwuzla = "bitwuzla"
@@ -76,6 +80,7 @@ def generate_bitwuzla_configs():
                 space(rewrite_level)
             )
     return configs
+
 
 def generate_z3_configs():
     configs = set()
@@ -92,6 +97,7 @@ def generate_z3_configs():
             )
     return configs
 
+
 def generate_mathsat_configs():
     configs = set()
     mathsat = "mathsat"
@@ -102,6 +108,7 @@ def generate_mathsat_configs():
             space(seed_cfg)
         )
     return configs
+
 
 def generate_cvc5_configs():
     configs = set()
@@ -114,6 +121,7 @@ def generate_cvc5_configs():
                 space(f"--decision={decision}")
             )
     return configs
+
 
 def generate_solver_configs():
     # yices_configs = generate_yices_configs()
@@ -137,35 +145,38 @@ def generate_solver_configs():
         "cvc5"
     }
 
+
 def generate_engines():
     engines = set()
     engines.add("abc bmc3")
     engines.add("btor btormc")
     engines.add("btor pono")
     smt_engine = "smtbmc"
-    # for mem_representation in ["--nomem", ""]:
-    #     for is_syn in ["--syn", ""]:
-    #         for is_big_vec in ["--stbv", ""]:
-    #             for is_presat in ["--nopresat", ""]:
-    #                 for is_unroll in ["--unroll", "--nounroll"]:
-    #                     for solver_cfg in generate_solver_configs():
-    #                         engines.add(
-    #                             space(smt_engine) +
-    #                             space(mem_representation) +
-    #                             space(is_syn) +
-    #                             space(is_big_vec) +
-    #                             space(is_presat) +
-    #                             space(is_unroll) +
-    #                             space(solver_cfg))
-    for is_unroll in ["--unroll", "--nounroll"]:
-        for solver_cfg in generate_solver_configs():
-            engines.add(
-                space(smt_engine) +
-                space(is_unroll) +
-                space(solver_cfg))
+    for mem_representation in ["--nomem", ""]:
+        for is_syn in ["--syn", ""]:
+            for is_big_vec in ["--stbv", ""]:
+                for is_presat in ["--nopresat", ""]:
+                    for is_unroll in ["--unroll", "--nounroll"]:
+                        for solver_cfg in generate_solver_configs():
+                            engines.add(
+                                space(smt_engine) +
+                                space(mem_representation) +
+                                space(is_syn) +
+                                space(is_big_vec) +
+                                space(is_presat) +
+                                space(is_unroll) +
+                                space(solver_cfg))
+    # for is_unroll in ["--unroll", "--nounroll"]:
+    #     for solver_cfg in generate_solver_configs():
+    #         engines.add(
+    #             space(smt_engine) +
+    #             space(is_unroll) +
+    #             space(solver_cfg))
     return engines
+
 
 def print_engine_number():
     print(len(generate_engines()))
+
 
 print_engine_number()
