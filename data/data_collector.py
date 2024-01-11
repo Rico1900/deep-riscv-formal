@@ -5,7 +5,6 @@ from parsy import ParseError
 from dataclasses import dataclass
 from checks.constant import TIMEOUT
 from functools import reduce
-from itertools import groupby
 
 
 @dataclass
