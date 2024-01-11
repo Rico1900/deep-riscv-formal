@@ -83,3 +83,7 @@ def generate_statistics(data: list[EnginePerformance]) -> Statistics:
             summary[champion.checking_config] += 1
         detail.append(group)
     return Statistics(summary=summary, details=detail)
+
+
+def statistics(directory: str) -> Statistics:
+    return generate_statistics(traverse_folder(directory))

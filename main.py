@@ -1,5 +1,5 @@
 import argparse
-from data.data_collector import traverse_folder, generate_statistics
+from data.data_collector import statistics
 
 
 def main():
@@ -7,8 +7,8 @@ def main():
     parser.add_argument("folder", help="the name of the folder that contains the data")
     args = parser.parse_args()
     folder = args.folder
-    statistics = generate_statistics(traverse_folder(folder))
-    print(statistics)
+    data = statistics(folder)
+    print(data)
 
 
 if __name__ == '__main__':
