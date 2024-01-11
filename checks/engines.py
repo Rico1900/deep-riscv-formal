@@ -98,51 +98,20 @@ def generate_z3_configs():
     return configs
 
 
-def generate_mathsat_configs():
-    configs = set()
-    mathsat = "mathsat"
-    for seed in range(5):
-        seed_cfg = f"-random_seed={seed}"
-        configs.add(
-            space(mathsat) +
-            space(seed_cfg)
-        )
-    return configs
-
-
-def generate_cvc5_configs():
-    configs = set()
-    cvc5 = "cvc5"
-    for prop in ["--bv-propagate", ""]:
-        for decision in ["internal", "justification", "stoponly"]:
-            configs.add(
-                space(cvc5) +
-                space(prop) +
-                space(f"--decision={decision}")
-            )
-    return configs
-
-
 def generate_solver_configs():
     # yices_configs = generate_yices_configs()
     # boolector_configs = generate_boolector_configs()
     # bitwuzla_configs = generate_bitwuzla_configs()
     # z3_configs = generate_z3_configs()
-    # mathsat_configs = generate_mathsat_configs()
-    # cvc5_configs = generate_cvc5_configs()
     # return (yices_configs |
     #         boolector_configs |
     #         bitwuzla_configs |
-    #         z3_configs |
-    #         mathsat_configs |
-    #         cvc5_configs)
+    #         z3_configs)
     return {
         "yices",
         "boolector",
         "bitwuzla",
         "z3",
-        "mathsat",
-        "cvc5"
     }
 
 
