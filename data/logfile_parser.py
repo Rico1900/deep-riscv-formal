@@ -1,6 +1,7 @@
 from parsy import string, regex, seq, digit, letter
 from datetime import timedelta
 from dataclasses import dataclass
+from checks.constant import TIMEOUT
 
 
 @dataclass
@@ -19,6 +20,8 @@ class EnginePerformance:
                 break
         self.task_name = "_".join(splits[:index])
         self.checking_config = "_".join(splits[index:])
+        if self.time_consumption > TIMEOUT:
+            self.time_consumption = TIMEOUT
 
     def __str__(self):
         return f"engine_name={self.name}, time_consumption={self.time_consumption}"
