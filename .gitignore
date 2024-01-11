@@ -1,5 +1,8 @@
 /cores/.gitignore
 
+# pycharm
+.uuid
+
 # VS Code
 .idea
 
