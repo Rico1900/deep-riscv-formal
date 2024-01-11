@@ -2,10 +2,23 @@ from parsy import string, regex, seq, digit, letter
 from datetime import timedelta
 from dataclasses import dataclass
 
+
 @dataclass
 class EnginePerformance:
     name: str
     time_consumption: int
+    task_name: str = ""
+    checking_config: str = ""
+
+    def __post_init__(self):
+        splits = self.name.split("_")
+        index = 0
+        for i, item in enumerate(splits):
+            if item == "abc" or item == "btor" or item == "smtbmc":
+                index = i
+                break
+        self.task_name = "_".join(splits[:index])
+        self.checking_config = "_".join(splits[index:])
 
     def __str__(self):
         return f"engine_name={self.name}, time_consumption={self.time_consumption}"
