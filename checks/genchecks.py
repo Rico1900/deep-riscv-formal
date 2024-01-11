@@ -19,7 +19,7 @@ from functools import reduce
 from util import process_engine_cfg
 from option import HyperMode
 from engines import generate_engines
-from config.constant import TIMEOUT
+from constant import TIMEOUT
 
 nret = 1
 isa = "rv32i"
